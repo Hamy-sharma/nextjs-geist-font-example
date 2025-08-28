@@ -1,0 +1,319 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  PAID
+  MATERNITY
+  PATERNITY
+  EMERGENCY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CandidateStatus {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  SELECTED
+  REJECTED
+  HIRED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(EMPLOYEE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee?
+
+  @@map("users")
+}
+
+model Employee {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal Information
+  firstName      String
+  lastName       String
+  email          String   @unique
+  phone          String?
+  address        String?
+  dateOfBirth    DateTime?
+  emergencyName  String?
+  emergencyPhone String?
+
+  // Professional Information
+  employeeId     String         @unique
+  position       String
+  department     String
+  dateOfJoining  DateTime
+  salary         Float
+  employmentType EmploymentType @default(FULL_TIME)
+  isActive       Boolean        @default(true)
+
+  // Documents (store file paths)
+  documents Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  attendances  Attendance[]
+  leaves       Leave[]
+  payrolls     Payroll[]
+  performances Performance[]
+
+  @@map("employees")
+}
+
+model Attendance {
+  id         String            @id @default(cuid())
+  employeeId String
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  date       DateTime          @db.Date
+  clockIn    DateTime?
+  clockOut   DateTime?
+  
+  // Location data
+  clockInLat  Float?
+  clockInLng  Float?
+  clockOutLat Float?
+  clockOutLng Float?
+  
+  // Calculated fields
+  totalHours    Float?
+  overtimeHours Float?
+  status        AttendanceStatus @default(PRESENT)
+  isLate        Boolean          @default(false)
+  isEarlyExit   Boolean          @default(false)
+  
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, date])
+  @@map("attendances")
+}
+
+model Leave {
+  id         String      @id @default(cuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  leaveType   LeaveType
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  totalDays   Int
+  reason      String
+  status      LeaveStatus @default(PENDING)
+  
+  // Approval details
+  approvedBy   String?
+  approvedAt   DateTime?
+  rejectedBy   String?
+  rejectedAt   DateTime?
+  rejectionReason String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("leaves")
+}
+
+model Payroll {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  month         Int
+  year          Int
+  baseSalary    Float
+  allowances    Float    @default(0)
+  deductions    Float    @default(0)
+  overtime      Float    @default(0)
+  bonus         Float    @default(0)
+  netSalary     Float
+  
+  // Attendance-based calculations
+  workingDays   Int
+  presentDays   Int
+  absentDays    Int
+  leaveDays     Int
+  
+  // Tax calculations
+  taxDeducted   Float    @default(0)
+  
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@map("payrolls")
+}
+
+model Performance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  reviewPeriod String // e.g., "Q1 2024", "Annual 2024"
+  
+  // KPIs and Goals
+  kpis         Json? // Store KPI data as JSON
+  goals        Json? // Store goals as JSON
+  achievements Json? // Store achievements as JSON
+  
+  // Ratings (1-5 scale)
+  overallRating      Float?
+  technicalRating    Float?
+  communicationRating Float?
+  teamworkRating     Float?
+  leadershipRating   Float?
+  
+  // Feedback
+  managerFeedback String?
+  selfAssessment  String?
+  peerFeedback    Json? // Store multiple peer feedback as JSON
+  
+  // Review details
+  reviewedBy String?
+  reviewDate DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("performances")
+}
+
+model Candidate {
+  id    String          @id @default(cuid())
+  email String          @unique
+  
+  // Personal Information
+  firstName String
+  lastName  String
+  phone     String?
+  address   String?
+  
+  // Application Information
+  position     String
+  department   String
+  appliedDate  DateTime @default(now())
+  status       CandidateStatus @default(APPLIED)
+  
+  // Resume and documents
+  resumePath   String?
+  documents    Json? // Store additional document paths
+  
+  // Interview details
+  interviewDate     DateTime?
+  interviewNotes    String?
+  interviewerName   String?
+  
+  // Hiring details
+  expectedSalary    Float?
+  offeredSalary     Float?
+  joiningDate       DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("candidates")
+}
+
+model ComplianceDocument {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  filePath     String
+  category     String    // e.g., "Policy", "Contract", "Certificate"
+  
+  expiryDate   DateTime?
+  reminderSent Boolean   @default(false)
+  
+  // Applicable to
+  department   String?   // If null, applies to all
+  employeeId   String?   // If specified, applies to specific employee
+  
+  uploadedBy   String
+  uploadedAt   DateTime  @default(now())
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("compliance_documents")
+}
+
+model JobPosting {
+  id          String   @id @default(cuid())
+  title       String
+  department  String
+  description String
+  requirements String
+  
+  salaryMin   Float?
+  salaryMax   Float?
+  location    String
+  
+  isActive    Boolean  @default(true)
+  postedBy    String
+  postedAt    DateTime @default(now())
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("job_postings")
+}
+
+model SystemSettings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
